@@ -22,14 +22,14 @@ prohibited and subject to being investigated as a GT honor code violation.
 -----do not edit anything above this line---
 """
 
-from Machine_Translation import device
+# from Machine_Translation import device
 import torch
 import torch.nn as nn
 import torch.optim as optim
 
 
 # import custom models
-
+device = torch.device('cpu')
 
 class Seq2Seq(nn.Module):
     """ The Sequence to Sequence model.
@@ -75,22 +75,27 @@ class Seq2Seq(nn.Module):
         #          will have to be manipulated before being fed in as the decoder   #
         #          input at the next time step.                                     #
         #############################################################################
-
-        #
+        # 1) encoder
         encoder_outputs, (h_n, c_n) = self.encoder(source)
+        
+        # 2) adjust hidden shape for decoder
+        h_n = h_n[-1].unsqueeze(0)  # take last layer
+        c_n = c_n[-1].unsqueeze(0)
+        hidden_decoder = (h_n, c_n)
 
-        input_decoder = source[:, 0] # shape (batch,)
+        # 3) initialize decoder input (<sos>)
+        input_decoder = source[:, 0]
 
-        output_size = self.decoder.output_size
-        outputs = torch.zeros(batch_size, seq_len, output_size, device=self.device)
+        # 4) initialize outputs tensor
+        outputs = torch.zeros(batch_size, seq_len, self.decoder.output_size, device=self.device)
 
-        hidden = (h_n, c_n)
-        for t in range(seq_len):
-            output, hidden = self.decoder(input_decoder, hidden)
-
-            outputs[:, t, :] = output
-
+        # 5) decoder
+        output, hidden = self.decoder(input_decoder, hidden_decoder)
+        outputs[:, 0, :] = output
+        for t in range(1, seq_len):
             input_decoder = output.argmax(dim=1)
+            output, hidden = self.decoder(input_decoder, hidden)
+            outputs[:, t, :] = output
         #############################################################################
         #                              END OF YOUR CODE                             #
         #############################################################################

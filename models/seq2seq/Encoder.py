@@ -57,8 +57,24 @@ class Encoder(nn.Module):
         #                                                                           #
         # NOTE: Use nn.RNN and nn.LSTM instead of the naive implementation          #
         #############################################################################
+        # 1) Embedding layer
+        self.embedding = nn.Embedding(self.input_size,self.emb_size)
+        # 2) RNN or LSTM layer
+        if self.model_type == "RNN":
+            self.rnn = nn.RNN(self.emb_size, self.encoder_hidden_size, batch_first=True)
+        elif self.model_type == "LSTM":
+            self.rnn = nn.LSTM(self.emb_size, self.encoder_hidden_size, batch_first=True)
+        else:
+            raise ValueError("Unsupported model_type. Choose 'RNN' or 'LSTM'")
 
+        # 3) Linear layers with ReLu and Tanh
+        self.linear1 = nn.Linear(self.encoder_hidden_size, self.encoder_hidden_size)
+        self.activation = nn.ReLU()
+        self.linear2 = nn.Linear(self.encoder_hidden_size, self.decoder_hidden_size)
+        self.activation_final = nn.Tanh()
 
+        # 4) Dropout
+        self.dropout = nn.Dropout(dropout)
         #############################################################################
         #                              END OF YOUR CODE                             #
         #############################################################################
@@ -86,9 +102,91 @@ class Encoder(nn.Module):
         #       If model_type is LSTM, the hidden variable returns a tuple          #
         #       containing both the hidden state and the cell state of the LSTM.    #
         #############################################################################
+        # input: (batch, seq_len)
+
+        # embedding + dropout
+        embedding = self.embedding(input)
+        # dropout certain signals. still output is (batch_size, seq len , embedding dim)
+        embedding = self.dropout(embedding)
+
+        # if debug:
+        #     print("embedding shape:", embedding.shape)
+        #     print("embedding values:", embedding)
+
+        # RNN / LSTM
+        if self.model_type == "RNN":
+            # output: (batch, seq_len, hidden), hidden: (1, batch, hidden)
+            output,hidden= self.rnn(embedding)
+            # if debug:
+            #     print("Raw hidden shape (RNN):", hidden.shape)
+            #     print("Raw hidden values:", hidden)
+            hidden = hidden.squeeze(0)
+
+            # Linear + activation
+            hidden = self.linear1(hidden)
+            hidden = self.activation(hidden)
+            hidden = self.linear2(hidden)
+            hidden = self.activation_final(hidden)  # (batch, decoder_hidden_size)
+
+        else:  # LSTM
+            # output: (batch, seq_len, hidden)
+            # hidden, cell: (num_layers=1, batch, hidden)
+            output, (hidden, cell) = self.rnn(embedding)
+            # if debug:
+            #     print("Raw hidden shape (LSTM):", hidden.shape)
+            #     print("Raw hidden values:", hidden)
+            #     print("Raw cell shape:", cell.shape)
+            #     print("Raw cell values:", cell)
+            # take last layer only: (batch, hidden)
+            hidden_last = hidden[-1]
+            cell_last = cell[-1]
+
+            # Linear + activation on hidden only
+            hidden_transformed = self.linear1(hidden_last)
+            hidden_transformed = self.activation(hidden_transformed)
+            hidden_transformed = self.linear2(hidden_transformed)
+            hidden_transformed = self.activation_final(hidden_transformed)
+            
+            # return tuple for LSTM
+            hidden = (hidden_transformed, cell_last)
 
         #############################################################################
         #                              END OF YOUR CODE                             #
         #############################################################################
 
         return output, hidden
+
+
+
+# import os, sys
+
+# project_root = "/Users/wenwen/Downloads/CS 7643/A3/assignment3_NLP_spr26"
+# os.chdir(project_root)
+
+# if project_root not in sys.path:
+#     sys.path.insert(0, project_root)
+
+# print("Current directory:", os.getcwd())
+# print("Python path[0]:", sys.path[0])
+
+# import numpy as np
+# from utils import unit_test_values, set_seed_nb
+
+# set_seed_nb()
+# i, n, h = 10, 4, 2
+
+# encoder = Encoder(i, n, h, h)
+# x_array = np.random.rand(5,2) * 10
+# x = torch.LongTensor(x_array)
+# out, hidden = encoder.forward(x)
+
+# expected_out, expected_hidden = unit_test_values('encoder')
+
+
+# if out is not None:
+#     diff = expected_out - out
+#     print('Close to out: ', expected_out.allclose(out, atol=1e-3))
+#     print('Close to hidden: ', expected_hidden.allclose(hidden, atol=1e-3))
+#     print('diff', diff)
+# else:
+#     print("NOT IMPLEMENTED")

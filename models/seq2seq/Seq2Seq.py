@@ -75,26 +75,42 @@ class Seq2Seq(nn.Module):
         #          will have to be manipulated before being fed in as the decoder   #
         #          input at the next time step.                                     #
         #############################################################################
-        # 1) encoder
-        encoder_outputs, (h_n, c_n) = self.encoder(source)
+        # encoder
+        encoder_out = self.encoder(source)
+
+        if self.encoder.model_type == "LSTM":
+            encoder_outputs, (h_n, c_n) = encoder_out
+
+            # take last layer
+            # h_n = h_n[-1].unsqueeze(0)  # take last layer
+            # c_n = c_n[-1].unsqueeze(0)
+            hidden_decoder = (h_n, c_n)
         
-        # 2) adjust hidden shape for decoder
-        h_n = h_n[-1].unsqueeze(0)  # take last layer
-        c_n = c_n[-1].unsqueeze(0)
-        hidden_decoder = (h_n, c_n)
+        else:  # RNN
+            encoder_outputs, h_n = encoder_out
+            # h_n = h_n.squeeze(0).unsqueeze(0)  # shape (1, batch, hidden)
+            hidden_decoder = h_n
+            # print("seq2seq.py RNN h_n:", h_n.shape)
 
-        # 3) initialize decoder input (<sos>)
-        input_decoder = source[:, 0]
 
-        # 4) initialize outputs tensor
+        # 2) initialize decoder input (<sos>)
+        input_decoder = source[:, 0].unsqueeze(1)    #(1, batch, hidden)
+
+        # 3) initialize outputs tensor
         outputs = torch.zeros(batch_size, seq_len, self.decoder.output_size, device=self.device)
 
-        # 5) decoder
-        output, hidden = self.decoder(input_decoder, hidden_decoder)
+        # 2) decoder
+        output, hidden = self.decoder(input_decoder, hidden_decoder, encoder_outputs)
         outputs[:, 0, :] = output
+
         for t in range(1, seq_len):
-            input_decoder = output.argmax(dim=1)
-            output, hidden = self.decoder(input_decoder, hidden)
+            input_decoder = output.argmax(dim=1).unsqueeze(1)  #(1, batch, hidden)
+            # print("Before decoder:", 
+            # hidden_decoder[0].shape if isinstance(hidden_decoder, tuple) else hidden_decoder.shape)
+
+            output, hidden = self.decoder(input_decoder, hidden, encoder_outputs)
+            # print("After decoder:", 
+            # hidden[0].shape if isinstance(hidden, tuple) else hidden.shape)
             outputs[:, t, :] = output
         #############################################################################
         #                              END OF YOUR CODE                             #

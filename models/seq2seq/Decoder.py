@@ -156,7 +156,7 @@ class Decoder(nn.Module):
         if self.attention and encoder_outputs is not None:
             attn_probs = self.compute_attention(hidden if isinstance(hidden, torch.Tensor) else hidden[0], encoder_outputs)
             context = torch.bmm(attn_probs, encoder_outputs)
-            rnn_input = torch.cat([embedded, context], dim=2)
+            rnn_input = torch.cat([context, embedded], dim=2)
             rnn_input = self.attn(rnn_input)
         else:
             rnn_input = embedded
